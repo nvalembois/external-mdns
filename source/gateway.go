@@ -150,7 +150,7 @@ func (g *GatewaySource) buildRecords(obj any, action string) ([]resource.Resourc
 
 // NewIngressWatcher creates an IngressSource
 func NewGatewayWatcher(factory gatewayinformers.SharedInformerFactory, namespace string, notifyChan chan<- resource.Resource) GatewaySource {
-	gatewayInformer := factory.Gateway().V1().GatewayClasses().Informer()
+	gatewayInformer := factory.Gateway().V1().Gateways().Informer()
 	g := &GatewaySource{
 		namespace:      namespace,
 		notifyChan:     notifyChan,
