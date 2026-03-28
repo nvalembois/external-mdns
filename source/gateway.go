@@ -22,9 +22,9 @@ import (
 	"github.com/blake/external-mdns/resource"
 	"github.com/jpillora/go-tld"
 	"k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 // GatewaySource handles adding, updating, or removing mDNS record advertisements for Gateway resources
@@ -92,7 +92,7 @@ func (g *GatewaySource) onUpdate(oldObj interface{}, newObj interface{}) {
 	}
 }
 
-func (g *GatewaySource) buildRecords(obj interface{}, action string) ([]resource.Resource, error) {
+func (g *GatewaySource) buildRecords(obj any, action string) ([]resource.Resource, error) {
 	var records []resource.Resource
 
 	gateway, ok := obj.(*v1.Gateway)
@@ -149,8 +149,8 @@ func (g *GatewaySource) buildRecords(obj interface{}, action string) ([]resource
 }
 
 // NewIngressWatcher creates an IngressSource
-func NewGatewayWatcher(factory informers.SharedInformerFactory, namespace string, notifyChan chan<- resource.Resource) GatewaySource {
-	gatewayInformer := factory.Networking().V1().Ingresses().Informer()
+func NewGatewayWatcher(factory gatewayinformers.SharedInformerFactory, namespace string, notifyChan chan<- resource.Resource) GatewaySource {
+	gatewayInformer := factory.Gateway().V1().GatewayClasses().Informer()
 	g := &GatewaySource{
 		namespace:      namespace,
 		notifyChan:     notifyChan,
