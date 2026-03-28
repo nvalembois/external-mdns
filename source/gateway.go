@@ -21,14 +21,14 @@ import (
 
 	"github.com/blake/external-mdns/resource"
 	"github.com/jpillora/go-tld"
-	v1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
-// IngressSource handles adding, updating, or removing mDNS record advertisements
-type IngressSource struct {
+// GatewaySource handles adding, updating, or removing mDNS record advertisements for Gateway resources
+type GatewaySource struct {
 	namespace      string
 	notifyChan     chan<- resource.Resource
 	sharedInformer cache.SharedIndexInformer
@@ -36,16 +36,16 @@ type IngressSource struct {
 
 // Run starts shared informers and waits for the shared informer cache to
 // synchronize.
-func (i *IngressSource) Run(stopCh chan struct{}) error {
-	i.sharedInformer.Run(stopCh)
-	if !cache.WaitForCacheSync(stopCh, i.sharedInformer.HasSynced) {
+func (g *GatewaySource) Run(stopCh chan struct{}) error {
+	g.sharedInformer.Run(stopCh)
+	if !cache.WaitForCacheSync(stopCh, g.sharedInformer.HasSynced) {
 		runtime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
 	}
 	return nil
 }
 
-func (i *IngressSource) onAdd(obj interface{}) {
-	advertiseRecords, err := i.buildRecords(obj, resource.Added)
+func (g *GatewaySource) onAdd(obj interface{}) {
+	advertiseRecords, err := g.buildRecords(obj, resource.Added)
 
 	if err != nil {
 		fmt.Println("Error adding ingress")
@@ -53,12 +53,12 @@ func (i *IngressSource) onAdd(obj interface{}) {
 	}
 
 	for _, record := range advertiseRecords {
-		i.notifyChan <- record
+		g.notifyChan <- record
 	}
 }
 
-func (i *IngressSource) onDelete(obj interface{}) {
-	advertiseRecords, err := i.buildRecords(obj, resource.Deleted)
+func (g *GatewaySource) onDelete(obj interface{}) {
+	advertiseRecords, err := g.buildRecords(obj, resource.Deleted)
 
 	if err != nil {
 		fmt.Println("Error deleting ingress")
@@ -66,44 +66,44 @@ func (i *IngressSource) onDelete(obj interface{}) {
 	}
 
 	for _, record := range advertiseRecords {
-		i.notifyChan <- record
+		g.notifyChan <- record
 	}
 }
 
-func (i *IngressSource) onUpdate(oldObj interface{}, newObj interface{}) {
-	oldResources, err1 := i.buildRecords(oldObj, resource.Updated)
+func (g *GatewaySource) onUpdate(oldObj interface{}, newObj interface{}) {
+	oldResources, err1 := g.buildRecords(oldObj, resource.Updated)
 	if err1 != nil {
 		fmt.Printf("Error gathering old ingress resources: %s", err1)
 	}
 
 	for _, record := range oldResources {
 		record.Action = resource.Deleted
-		i.notifyChan <- record
+		g.notifyChan <- record
 	}
 
-	newResources, err2 := i.buildRecords(newObj, resource.Updated)
+	newResources, err2 := g.buildRecords(newObj, resource.Updated)
 	if err2 != nil {
 		fmt.Printf("Error gathering new ingress resources: %s", err2)
 	}
 
 	for _, record := range newResources {
 		record.Action = resource.Added
-		i.notifyChan <- record
+		g.notifyChan <- record
 	}
 }
 
-func (i *IngressSource) buildRecords(obj interface{}, action string) ([]resource.Resource, error) {
+func (g *GatewaySource) buildRecords(obj any, action string) ([]resource.Resource, error) {
 	var records []resource.Resource
 
-	ingress, ok := obj.(*v1.Ingress)
+	gateway, ok := obj.(*v1.Gateway)
 	if !ok {
 		return records, nil
 	}
 
 	var ipFields []string
-	for _, lb := range ingress.Status.LoadBalancer.Ingress {
-		if lb.IP != "" {
-			ipFields = append(ipFields, lb.IP)
+	for _, address := range gateway.Status.Addresses {
+		if *address.Type == v1.IPAddressType {
+			ipFields = append(ipFields, address.Value)
 		}
 	}
 
@@ -113,17 +113,20 @@ func (i *IngressSource) buildRecords(obj interface{}, action string) ([]resource
 
 	// Advertise each hostname under this Ingress
 	var hostname string
-	for _, rule := range ingress.Spec.Rules {
-		// Skip rules with no hostname or that do not use the .local TLD
-		if rule.Host == "" || !strings.HasSuffix(rule.Host, ".local") {
+	for _, listener := range gateway.Spec.Listeners {
+		// Skip rules with no hostname
+		if listener.Hostname == nil {
+			continue
+		}
+		fakeURL := fmt.Sprintf("http://%s", string(*listener.Hostname))
+		// Skip rules that do not use the .local TLD
+		if !strings.HasSuffix(fakeURL, ".local") {
 			continue
 		}
 
-		fakeURL := fmt.Sprintf("http://%s", rule.Host)
 		parsedHost, err := tld.Parse(fakeURL)
-
 		if err != nil {
-			log.Printf("Unable to parse hostname %s. %s", rule.Host, err.Error())
+			log.Printf("Unable to parse hostname %s. %s", string(*listener.Hostname), err.Error())
 			continue
 		}
 
@@ -133,10 +136,10 @@ func (i *IngressSource) buildRecords(obj interface{}, action string) ([]resource
 			hostname = parsedHost.Domain
 		}
 		advertiseObj := resource.Resource{
-			SourceType: "ingress",
+			SourceType: "gateway",
 			Action:     action,
 			Names:      []string{hostname},
-			Namespace:  ingress.Namespace,
+			Namespace:  gateway.Namespace,
 			IPs:        ipFields,
 		}
 
@@ -146,22 +149,22 @@ func (i *IngressSource) buildRecords(obj interface{}, action string) ([]resource
 }
 
 // NewIngressWatcher creates an IngressSource
-func NewIngressWatcher(factory informers.SharedInformerFactory, namespace string, notifyChan chan<- resource.Resource) IngressSource {
-	ingressInformer := factory.Networking().V1().Ingresses().Informer()
-	i := &IngressSource{
+func NewGatewayWatcher(factory gatewayinformers.SharedInformerFactory, namespace string, notifyChan chan<- resource.Resource) GatewaySource {
+	gatewayInformer := factory.Gateway().V1().Gateways().Informer()
+	g := &GatewaySource{
 		namespace:      namespace,
 		notifyChan:     notifyChan,
-		sharedInformer: ingressInformer,
+		sharedInformer: gatewayInformer,
 	}
 
-	_, err := ingressInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    i.onAdd,
-		DeleteFunc: i.onDelete,
-		UpdateFunc: i.onUpdate,
+	_, err := gatewayInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    g.onAdd,
+		DeleteFunc: g.onDelete,
+		UpdateFunc: g.onUpdate,
 	})
 	if err != nil {
-		log.Printf("Add Ingress watcher error %s\n", err)
+		log.Printf("Add Gateway watcher error %s\n", err)
 	}
 
-	return *i
+	return *g
 }
