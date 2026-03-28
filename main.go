@@ -37,7 +37,7 @@ func (s *k8sSource) String() string {
 
 func (s *k8sSource) Set(value string) error {
 	switch value {
-	case "ingress", "service":
+	case "ingress", "service", "gateway":
 		*s = append(*s, value)
 	}
 	return nil
@@ -256,6 +256,9 @@ func main() {
 		case "service":
 			serviceController := source.NewServicesWatcher(factory, namespace, notifyMdns, publishInternal)
 			go serviceController.Run(stopper) //nolint
+		case "gateway":
+			gatewayController := source.NewServicesWatcher(factory, namespace, notifyMdns, publishInternal)
+			go gatewayController.Run(stopper) //nolint
 		}
 	}
 
