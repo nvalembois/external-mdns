@@ -157,11 +157,14 @@ func NewGatewayWatcher(factory gatewayinformers.SharedInformerFactory, namespace
 		sharedInformer: gatewayInformer,
 	}
 
-	gatewayInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := gatewayInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    g.onAdd,
 		DeleteFunc: g.onDelete,
 		UpdateFunc: g.onUpdate,
 	})
+	if err != nil {
+		log.Printf("Add Gateway watcher error %s\n", err)
+	}
 
 	return *g
 }
