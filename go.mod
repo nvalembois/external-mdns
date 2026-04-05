@@ -2,6 +2,8 @@ module github.com/blake/external-mdns
 
 go 1.25.0
 
+toolchain go1.25.5
+
 require (
 	github.com/jpillora/go-tld v1.0.0
 	github.com/miekg/dns v1.1.31

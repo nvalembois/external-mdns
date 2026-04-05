@@ -10,10 +10,10 @@ It is based on <https://github.com/flix-tech/k8s-mdns/> and heavily inspired by
 
 External-mDNS makes Kubernetes resources discoverable on a local network via
 multicast DNS without the need for a separate DNS server. It retrieves a list of
-resources (Services and Ingresses) from Kubernetes and serves the record to local
+resources (Services, Ingresses, Gateways, and HTTPRoutes) from Kubernetes and serves the record to local
 clients via multicast DNS.
 
-Hostnames associated with Ingress resources, or exposed services of type
+Hostnames associated with Ingress resources, Gateway resources, HTTPRoutes, or exposed services of type
 LoadBalancer, will be advertised on the local network.
 
 By default External-mDNS will advertise hostnames for exposed resources in all
@@ -23,6 +23,9 @@ namespace, or `-without-namespace=true` for all namespaces.
 DNS records are advertised with the format `<hostname/service_name>.<namespace>.local`.
 In addition, hostnames for resources in the `-default-namespace` will also be
 advertised with a short name of `<hostname/service_name>.local`.
+### Gateway and HTTPRoute Support
+
+Gateway resources from the Kubernetes Gateway API can also be advertised. Hostnames defined in Gateway listeners and HTTPRoute hostnames are advertised when they end with `.local`. The IP addresses are taken from the Gateway's status addresses.
 
 ### Additional control for Services
 

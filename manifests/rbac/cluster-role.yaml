@@ -10,3 +10,6 @@ rules:
   - apiGroups: ["extensions", "networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways", "grpcroutes", "httproutes"]
+    verbs: ["list", "watch"]

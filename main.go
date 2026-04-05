@@ -214,7 +214,7 @@ func main() {
 	flag.StringVar(&defaultNamespace, "default-namespace", lookupEnvOrString("EXTERNAL_MDNS_DEFAULT_NAMESPACE", defaultNamespace), "Namespace in which services should also be published with a shorter entry")
 	flag.BoolVar(&withoutNamespace, "without-namespace", lookupEnvOrBool("EXTERNAL_MDNS_WITHOUT_NAMESPACE", withoutNamespace), "Published with a shorter entry without namespace (default: false)")
 	flag.StringVar(&namespace, "namespace", lookupEnvOrString("EXTERNAL_MDNS_NAMESPACE", namespace), "Limit sources of endpoints to a specific namespace (default: all namespaces)")
-	flag.Var(&sourceFlag, "source", "The resource types that are queried for endpoints; specify multiple times for multiple sources (required, options: service, ingress)")
+	flag.Var(&sourceFlag, "source", "The resource types that are queried for endpoints; specify multiple times for multiple sources (required, options: service, ingress, gateway)")
 	flag.BoolVar(&exposeIPv4, "expose-ipv4", lookupEnvOrBool("EXTERNAL_MDNS_EXPOSE_IPV4", exposeIPv4), "Publish A DNS entry (default: true)")
 	flag.BoolVar(&exposeIPv6, "expose-ipv6", lookupEnvOrBool("EXTERNAL_MDNS_EXPOSE_IPV6", exposeIPv6), "Publish AAAA DNS entry (default: false)")
 	flag.IntVar(&recordTTL, "record-ttl", lookupEnvOrInt("EXTERNAL_MDNS_RECORD_TTL", recordTTL), "DNS record time-to-live")
