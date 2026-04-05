@@ -9,7 +9,6 @@ import (
 	"reflect"
 
 	"github.com/miekg/dns"
-	"github.com/mitchellh/copystructure"
 )
 
 var (
@@ -41,7 +40,7 @@ func Publish(r string) error {
 	if err != nil {
 		return err
 	}
-	local.op <- operation{"add", &entry{rr}}
+	local.op <- operation{"add", &entry{RR: rr}}
 	return nil
 }
 
@@ -51,7 +50,7 @@ func UnPublish(r string) error {
 	if err != nil {
 		return err
 	}
-	local.op <- operation{"del", &entry{rr}}
+	local.op <- operation{"del", &entry{RR: rr}}
 	return nil
 }
 
@@ -62,6 +61,7 @@ func Clear() {
 
 type entry struct {
 	dns.RR
+	count int
 }
 
 func (e *entry) fqdn() string {
@@ -77,7 +77,7 @@ type entries []*entry
 
 func (e entries) contains(entry *entry) int {
 	for i, ee := range e {
-		if reflect.DeepEqual(entry, ee) {
+		if reflect.DeepEqual(entry.RR, ee.RR) {
 			return i
 		}
 	}
@@ -102,23 +102,29 @@ func (z *zone) mainloop() {
 			entry := op.entry
 			switch op.op {
 			case "add":
-				if z.entries[entry.fqdn()].contains(entry) == -1 {
+				if idx := z.entries[entry.fqdn()].contains(entry); idx == -1 {
+					entry.count = 1
 					z.entries[entry.fqdn()] = append(z.entries[entry.fqdn()], entry)
+				} else {
+					z.entries[entry.fqdn()][idx].count++
 				}
 			case "del":
 				entries := z.entries[entry.fqdn()]
-				idx := z.entries[entry.fqdn()].contains(entry)
+				idx := entries.contains(entry)
 				if idx != -1 {
-					numEntries := len(entries)
-					if numEntries == 1 {
-						delete(z.entries, entry.fqdn())
-					} else {
-						// Copy last element to index idx
-						entries[idx] = entries[numEntries-1]
-						// Erase last element (write nil value).
-						entries[numEntries-1] = nil
-						// Truncate slice
-						z.entries[entry.fqdn()] = entries[:numEntries-1]
+					entries[idx].count--
+					if entries[idx].count <= 0 {
+						numEntries := len(entries)
+						if numEntries == 1 {
+							delete(z.entries, entry.fqdn())
+						} else {
+							// Copy last element to index idx
+							entries[idx] = entries[numEntries-1]
+							// Erase last element (write nil value).
+							entries[numEntries-1] = nil
+							// Truncate slice
+							z.entries[entry.fqdn()] = entries[:numEntries-1]
+						}
 					}
 				}
 			case "clr":
@@ -139,12 +145,7 @@ func (z *zone) query(q dns.Question) (entries []*entry) {
 	res := make(chan *entry, 16)
 	z.queries <- &query{q, res}
 	for e := range res {
-		dup, err := copystructure.Copy(e)
-		if err != nil {
-			return
-		}
-		response := dup.(*entry)
-		entries = append(entries, response)
+		entries = append(entries, e)
 	}
 	return
 }
